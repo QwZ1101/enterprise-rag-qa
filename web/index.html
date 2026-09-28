@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>企业知识库问答 · 中芯国际年报</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath d='M24 6c4 6 10 8 16 8-6 4-8 10-8 16-6-4-12-4-18 0 0-6-2-12-8-16 6 0 12-2 18-8z' fill='%235b5bd6'/%3E%3C/svg%3E">
+<script src="/vendor/vue.global.prod.js"></script>
+<style>
+  :root{
+    --brand:#5b5bd6; --brand-d:#4846c7; --brand-soft:#efeffc;
+    --ink:#1f2329; --ink-2:#4e5158; --ink-3:#8a8f99;
+    --line:#e7e8ec; --bg:#ffffff; --side:#f6f7f9; --user:#2b2c30;
+    --danger:#d84b4b; --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink); background:var(--bg); font-size:15px; -webkit-font-smoothing:antialiased;
+  }
+  #app{height:100vh;display:flex;overflow:hidden;}
+
+  /* ---------- 侧边栏 ---------- */
+  .sidebar{width:248px;flex:0 0 248px;background:var(--side);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;padding:14px 12px;transition:margin-left .2s;}
+  .brand{display:flex;align-items:center;gap:9px;padding:6px 8px 14px;font-weight:700;font-size:16px;}
+  .brand svg{width:26px;height:26px;}
+  .new-chat{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+    border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:10px;
+    padding:10px 12px;font-size:14px;cursor:pointer;transition:.15s;}
+  .new-chat:hover{border-color:var(--brand);color:var(--brand);background:var(--brand-soft);}
+  .side-label{font-size:12px;color:var(--ink-3);margin:16px 8px 6px;}
+  .hist{flex:1;overflow-y:auto;margin:0 -4px;padding:0 4px;}
+  .hist-item{padding:9px 10px;border-radius:9px;font-size:13px;color:var(--ink-2);cursor:pointer;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;}
+  .hist-item:hover{background:#eceef2;}
+  .hist-item.active{background:#e4e6fb;color:var(--brand-d);font-weight:600;}
+  .side-foot{margin-top:10px;border-top:1px solid var(--line);padding-top:10px;}
+  .side-foot .meta{font-size:12px;color:var(--ink-3);padding:6px 8px;line-height:1.6;word-break:break-all;}
+  .side-foot .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#34b36b;margin-right:6px;}
+
+  /* ---------- 主区 ---------- */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;position:relative;}
+  .topbar{height:56px;flex:0 0 56px;border-bottom:1px solid var(--line);display:flex;align-items:center;
+    padding:0 20px;gap:12px;}
+  .hamburger{display:none;border:none;background:none;font-size:20px;cursor:pointer;color:var(--ink);}
+  .model-name{font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px;}
+  .model-tag{font-size:11px;font-weight:600;color:var(--brand-d);background:var(--brand-soft);
+    border-radius:6px;padding:2px 7px;}
+  .topbar .spacer{flex:1;}
+  .kb-pill{font-size:12px;color:var(--ink-3);border:1px solid var(--line);border-radius:999px;padding:4px 11px;}
+
+  .scroll{flex:1;overflow-y:auto;scroll-behavior:smooth;}
+  .scroll-inner{max-width:840px;margin:0 auto;padding:24px 20px 20px;}
+
+  /* 欢迎页 */
+  .welcome{min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;}
+  .welcome .logo-big{width:58px;height:58px;margin-bottom:16px;}
+  .welcome h1{font-size:27px;margin:0 0 6px;font-weight:700;}
+  .welcome p.sub{color:var(--ink-3);margin:0 0 30px;font-size:14px;}
+  .examples{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;max-width:680px;}
+  .ex-card{border:1px solid var(--line);border-radius:12px;padding:14px 16px;text-align:left;cursor:pointer;
+    transition:.15s;background:#fff;}
+  .ex-card:hover{border-color:var(--brand);box-shadow:0 4px 16px rgba(91,91,214,.10);transform:translateY(-1px);}
+  .ex-card .t{font-size:14px;color:var(--ink);font-weight:600;margin-bottom:4px;}
+  .ex-card .d{font-size:12px;color:var(--ink-3);}
+
+  /* 消息 */
+  .msg{display:flex;gap:12px;margin-bottom:26px;}
+  .msg.user{flex-direction:row-reverse;}
+  .avatar{width:32px;height:32px;border-radius:9px;flex:0 0 32px;display:flex;align-items:center;
+    justify-content:center;font-size:13px;font-weight:700;}
+  .avatar.ai{background:var(--brand-soft);}
+  .avatar.ai svg{width:20px;height:20px;}
+  .avatar.hu{background:var(--user);color:#fff;}
+  .bubble{max-width:78%;min-width:0;}
+  .msg.user .bubble{background:var(--user);color:#fff;padding:11px 15px;border-radius:14px 14px 4px 14px;
+    line-height:1.65;white-space:pre-wrap;word-break:break-word;}
+  .card{background:#fff;border:1px solid var(--line);border-radius:4px 14px 14px 14px;padding:14px 17px;line-height:1.75;}
+  .answer-text{font-size:15.5px;color:var(--ink);word-break:break-word;}
+  .answer-text b{font-weight:700;}
+  .kind-flag{display:inline-block;font-size:11px;color:var(--brand-d);background:var(--brand-soft);
+    border-radius:6px;padding:1px 7px;margin-bottom:8px;}
+  .pages{margin-top:12px;display:flex;flex-wrap:wrap;gap:7px;align-items:center;}
+  .pages .lab{font-size:12px;color:var(--ink-3);margin-right:2px;}
+  .page-chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--brand-d);
+    background:var(--brand-soft);border:1px solid #d9d9f7;border-radius:999px;padding:3px 10px;
+    cursor:pointer;text-decoration:none;transition:.15s;}
+  .page-chip:hover{background:#e2e2fb;border-color:var(--brand);}
+  .page-chip svg{width:12px;height:12px;}
+  .meta-line{margin-top:10px;font-size:12px;color:var(--ink-3);display:flex;gap:14px;flex-wrap:wrap;}
+  details.reason{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px;}
+  details.reason summary{cursor:pointer;font-size:12.5px;color:var(--ink-3);outline:none;user-select:none;}
+  details.reason .rtext{margin-top:8px;font-size:13px;color:var(--ink-2);white-space:pre-wrap;line-height:1.7;
+    background:#fafafa;border-radius:8px;padding:10px 12px;}
+  .err-text{color:var(--danger);font-size:14px;}
+  .retry{margin-top:8px;border:1px solid var(--danger);color:var(--danger);background:#fff;border-radius:8px;
+    padding:5px 12px;font-size:12.5px;cursor:pointer;}
+  .retry:hover{background:#fdeeee;}
+  .typing{display:inline-flex;gap:4px;align-items:center;color:var(--ink-3);font-size:14px;}
+  .typing .dot{width:7px;height:7px;border-radius:50%;background:var(--brand);opacity:.5;
+    animation:blink 1.2s infinite both;}
+  .typing .dot:nth-child(2){animation-delay:.2s;} .typing .dot:nth-child(3){animation-delay:.4s;}
+  @keyframes blink{0%,80%,100%{opacity:.25;transform:translateY(0);}40%{opacity:1;transform:translateY(-2px);}}
+
+  /* 输入区 */
+  .composer-wrap{flex:0 0 auto;border-top:1px solid var(--line);background:linear-gradient(to top,#fff 70%,rgba(255,255,255,0));}
+  .composer{max-width:840px;margin:14px auto 16px;padding:0 20px;}
+  .input-box{border:1px solid var(--line);border-radius:16px;box-shadow:0 2px 10px rgba(20,20,50,.05);
+    padding:11px 12px 9px;transition:.15s;background:#fff;}
+  .input-box:focus-within{border-color:var(--brand);box-shadow:0 0 0 3px rgba(91,91,214,.10);}
+  .input-box textarea{width:100%;border:none;outline:none;resize:none;font-size:15px;line-height:1.6;
+    font-family:inherit;max-height:180px;display:block;background:transparent;color:var(--ink);}
+  .input-actions{display:flex;align-items:center;gap:8px;margin-top:7px;}
+  .kind-group{display:flex;gap:4px;background:#f1f2f5;border-radius:9px;padding:3px;}
+  .kind-btn{border:none;background:transparent;font-size:12.5px;color:var(--ink-3);padding:4px 11px;
+    border-radius:7px;cursor:pointer;}
+  .kind-btn.on{background:#fff;color:var(--brand-d);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.08);}
+  .input-actions .spacer{flex:1;}
+  .hint{font-size:11.5px;color:var(--ink-3);}
+  .send{width:36px;height:36px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;
+    justify-content:center;background:#d6d7dd;color:#fff;transition:.15s;}
+  .send.ready{background:var(--brand);} .send.ready:hover{background:var(--brand-d);}
+  .send:disabled{cursor:not-allowed;}
+  .send svg{width:18px;height:18px;}
+  .foot-note{text-align:center;font-size:11.5px;color:var(--ink-3);padding-bottom:10px;}
+
+  @media (max-width:860px){
+    .sidebar{position:absolute;z-index:20;height:100%;margin-left:-248px;box-shadow:2px 0 12px rgba(0,0,0,.12);}
+    .sidebar.open{margin-left:0;}
+    .hamburger{display:block;}
+    .examples{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- 侧边栏 -->
+  <aside class="sidebar" :class="{open: menuOpen}">
+    <div class="brand">
+      <svg viewBox="0 0 48 48" fill="none">
+        <defs><linearGradient id="lg1" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#6d6bf0"/><stop offset="1" stop-color="#3f8bff"/>
+        </linearGradient></defs>
+        <path d="M24 6c4 6 10 8 16 8-6 4-8 10-8 16-6-4-12-4-18 0 0-6-2-12-8-16 6 0 12-2 18-8z" fill="url(#lg1)"/>
+      </svg>
+      企业知识库
+    </div>
+    <button class="new-chat" @click="newSession">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      新建对话
+    </button>
+    <div class="side-label">对话历史</div>
+    <div class="hist">
+      <div v-if="sessions.length===1 && active.messages.length===0" style="color:var(--ink-3);font-size:12.5px;padding:6px 10px;">暂无对话</div>
+      <div v-for="s in sessions" :key="s.id" class="hist-item"
+           :class="{active:s.id===activeId}" @click="switchSession(s.id);menuOpen=false">
+        {{ s.title || '新对话' }}
+      </div>
+    </div>
+    <div class="side-foot">
+      <div class="meta">
+        <div><span class="dot"></span>服务在线</div>
+        <div style="margin-top:4px;">对话模型：{{ health.chat_model || 'qwen3.8-flash' }}</div>
+        <div>向量模型：{{ health.embedding_model }}</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 主区 -->
+  <main class="main">
+    <header class="topbar">
+      <button class="hamburger" @click="menuOpen=!menuOpen">☰</button>
+      <div class="model-name">企业知识库助手 <span class="model-tag">RAG</span></div>
+      <div class="spacer"></div>
+      <div class="kb-pill">{{ kbName }}</div>
+    </header>
+
+    <div class="scroll" ref="scroller">
+      <div class="scroll-inner">
+        <!-- 欢迎页 -->
+        <div class="welcome" v-if="active.messages.length===0">
+          <svg class="logo-big" viewBox="0 0 48 48" fill="none">
+            <defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#6d6bf0"/><stop offset="1" stop-color="#3f8bff"/>
+            </linearGradient></defs>
+            <path d="M24 6c4 6 10 8 16 8-6 4-8 10-8 16-6-4-12-4-18 0 0-6-2-12-8-16 6 0 12-2 18-8z" fill="url(#lg2)"/>
+          </svg>
+          <h1>你好，我是企业知识库助手</h1>
+          <p class="sub">基于《中芯国际2024年年度报告》检索增强生成，答案附 PDF 真实页码出处</p>
+          <div class="examples">
+            <div class="ex-card" v-for="(ex,i) in examples" :key="i" @click="send(ex.q, ex.kind)">
+              <div class="t">{{ ex.q }}</div>
+              <div class="d">{{ ex.d }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 对话流 -->
+        <template v-else>
+          <div class="msg" v-for="(m,idx) in active.messages" :key="idx" :class="m.role">
+            <div class="avatar ai" v-if="m.role==='assistant'">
+              <svg viewBox="0 0 48 48" fill="none"><path d="M24 6c4 6 10 8 16 8-6 4-8 10-8 16-6-4-12-4-18 0 0-6-2-12-8-16 6 0 12-2 18-8z" fill="#5b5bd6"/></svg>
+            </div>
+            <div class="avatar hu" v-else>我</div>
+            <div class="bubble">
+              <!-- 用户 -->
+              <div v-if="m.role==='user'">{{ m.text }}</div>
+              <!-- 助手 -->
+              <div class="card" v-else>
+                <div class="typing" v-if="m.loading">
+                  正在检索年报并生成答案<span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                </div>
+                <template v-else>
+                  <div class="err-text" v-if="m.error">
+                    {{ m.error }}
+                    <div><button class="retry" @click="retry(m)">重试</button></div>
+                  </div>
+                  <template v-else>
+                    <span class="kind-flag" v-if="m.kindLabel">{{ m.kindLabel }}</span>
+                    <div class="answer-text" v-html="render(m.answer || '（无内容）')"></div>
+                    <div class="pages" v-if="m.pages && m.pages.length">
+                      <span class="lab">页码出处（PDF 物理页）：</span>
+                      <a class="page-chip" v-for="p in m.pages" :key="p"
+                         :href="pdfUrl(m,p)" target="_blank" rel="noopener"
+                         :title="'在新标签打开 PDF 并跳到第 ' + p + ' 页'">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+                        第 {{ p }} 页
+                      </a>
+                    </div>
+                    <details class="reason" v-if="m.reasoning">
+                      <summary>推理依据 / 检索摘要</summary>
+                      <div class="rtext">{{ m.reasoning }}</div>
+                    </details>
+                    <div class="meta-line">
+                      <span v-if="m.company">知识库：{{ m.company }}</span>
+                      <span v-if="m.elapsed">耗时 {{ m.elapsed }} 秒</span>
+                    </div>
+                  </template>
+                </template>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- 输入区 -->
+    <div class="composer-wrap">
+      <div class="composer">
+        <div class="input-box">
+          <textarea ref="ta" v-model="input" rows="1" placeholder="向企业知识库提问，例如：中芯国际的总部位于哪个城市？"
+            @input="autoGrow" @keydown="onKey"></textarea>
+          <div class="input-actions">
+            <div class="kind-group">
+              <button class="kind-btn" v-for="k in kinds" :key="k.v"
+                      :class="{on:kind===k.v}" @click="kind=k.v">{{ k.label }}</button>
+            </div>
+            <span class="spacer"></span>
+            <span class="hint">Enter 发送 · Shift+Enter 换行</span>
+            <button class="send" :class="{ready:input.trim() && !sending}" :disabled="!input.trim() || sending"
+                    @click="send()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="foot-note">答案由大模型基于检索到的年报片段生成，页码可在 PDF 中核对，请注意甄别。</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const { createApp } = Vue;
+createApp({
+  data(){
+    return {
+      menuOpen:false,
+      sessions:[], activeId:null, seq:0,
+      input:'', kind:'string', sending:false,
+      health:{},
+      kbName:'中芯国际 2024 年年度报告',
+      kinds:[
+        {v:'string',label:'文本'},
+        {v:'number',label:'数字'},
+        {v:'boolean',label:'是否'},
+        {v:'names',label:'名称'},
+      ],
+      kindLabelMap:{string:'文本型',number:'数值型',boolean:'判断型',names:'名称型'},
+      examples:[
+        {q:'中芯国际的总部位于哪个城市？',kind:'string',d:'文本抽取 · 预期：上海'},
+        {q:'中芯国际2024年度的营业收入是多少人民币？',kind:'number',d:'数值抽取 · 附财务报表页码'},
+        {q:'中芯国际2024年是否盈利？',kind:'boolean',d:'是 / 否 判断'},
+        {q:'中芯国际的注册地址在哪里？',kind:'string',d:'区分注册地与总部'},
+      ],
+    };
+  },
+  computed:{
+    active(){ return this.sessions.find(s=>s.id===this.activeId) || {messages:[],title:''}; },
+  },
+  mounted(){
+    this.newSession();
+    fetch('/api/health').then(r=>r.json()).then(d=>{ this.health=d||{}; }).catch(()=>{});
+  },
+  updated(){ this.scrollToEnd(); },
+  methods:{
+    newSession(){
+      const s={id:++this.seq,title:'',messages:[]};
+      this.sessions.unshift(s); this.activeId=s.id; this.menuOpen=false;
+      this.$nextTick(()=>this.scrollToEnd());
+    },
+    switchSession(id){ this.activeId=id; },
+    autoGrow(){ const t=this.$refs.ta; if(!t)return; t.style.height='auto'; t.style.height=Math.min(t.scrollHeight,180)+'px'; },
+    onKey(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); this.send(); } },
+    scrollToEnd(){ const el=this.$refs.scroller; if(el) el.scrollTop=el.scrollHeight; },
+    escapeHtml(s){
+      return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    },
+    render(s){
+      let h=this.escapeHtml(s);
+      h=h.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+      h=h.replace(/\n/g,'<br>');
+      return h;
+    },
+    pdfUrl(m, p){
+      // 页码标签 -> 后端 PDF 接口，#page=N 让浏览器内置查看器跳到该物理页
+      const sha = (m.refMap && m.refMap[p]) || m.defaultSha || '';
+      return sha ? `/api/pdf/${encodeURIComponent(sha)}#page=${p}` : '#' ;
+    },
+    async send(presetQ, presetKind){
+      const q=(presetQ!==undefined?presetQ:this.input).trim();
+      if(!q || this.sending) return;
+      if(presetKind) this.kind=presetKind;
+      const useKind=this.kind;
+      this.input=''; this.$nextTick(()=>this.autoGrow());
+      const sess = this.sessions.find(s => s.id === this.activeId);
+      if(!sess.title) sess.title = q.length>18 ? q.slice(0,18)+'…' : q;
+      sess.messages.push({role:'user', text:q});
+      sess.messages.push({role:'assistant', loading:true});
+      const aiIndex = sess.messages.length - 1;
+      // 必须通过响应式代理对象回写，直接改 push 进去的原始对象不会触发 Vue3 刷新
+      const finish = (patch) => { const m = sess.messages[aiIndex]; if(m) Object.assign(m, patch); };
+      this.sending = true;
+      try{
+        const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(),180000);
+        const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({question:q,kind:useKind}),signal:ctrl.signal});
+        clearTimeout(timer);
+        const d=await r.json();
+        if(!r.ok || d.error){
+          finish({loading:false, error:d.error || ('请求失败（HTTP '+r.status+'）')});
+        }else{
+          const refs = d.references || [];
+          const refMap = {};
+          refs.forEach(r => { if(r && r.page_index!=null) refMap[r.page_index] = r.pdf_sha1; });
+          const defaultSha = refs.length ? refs[0].pdf_sha1 : '';
+          finish({loading:false, answer:d.answer, pages:d.pages||[], references:refs, refMap:refMap,
+            defaultSha:defaultSha, reasoning:d.reasoning_summary||'',
+            company:d.company, elapsed:d.elapsed_sec, kindLabel:this.kindLabelMap[d.kind]||''});
+        }
+      }catch(e){
+        finish({loading:false, error:e.name==='AbortError' ? '请求超时（超过 180 秒），请重试。' : ('网络/服务错误：'+e.message)});
+      }finally{ this.sending=false; this.$nextTick(()=>this.scrollToEnd()); }
+    },
+    retry(m){
+      // 找到该助手消息前一条用户消息重发
+      const idx=this.active.messages.indexOf(m);
+      const um=this.active.messages.slice(0,idx).reverse().find(x=>x.role==='user');
+      if(um){ this.active.messages.splice(idx,1); this.send(um.text); }
+    },
+  },
+}).mount('#app');
+</script>
+</body>
+</html>
