@@ -176,13 +176,11 @@ env
 .env
 .env.local
 
-# --- 知识库数据：原始 PDF 与构建产物不随仓库分发（体积大/含版权研报）---
-#     保留 subset.csv / questions.json 等小配置；PDF 与向量库需自备后按 README 重建。
+# --- 知识库数据：databases/（分块+向量库，运行必需）随仓库分发 ---
+#     原始 PDF 有版权不入库，部署时单独上传；debug_data 为中间产物、answers 为输出结果。
 data/stock_data/pdf_reports/
-data/stock_data/databases/
 data/stock_data/debug_data/
 data/stock_data/answers_*.json
-*.faiss
 *.pkl
 
 # --- 编辑器 / 系统临时文件 ---
