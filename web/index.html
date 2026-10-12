@@ -80,8 +80,6 @@
   .card{background:#fff;border:1px solid var(--line);border-radius:4px 14px 14px 14px;padding:14px 17px;line-height:1.75;}
   .answer-text{font-size:15.5px;color:var(--ink);word-break:break-word;}
   .answer-text b{font-weight:700;}
-  .kind-flag{display:inline-block;font-size:11px;color:var(--brand-d);background:var(--brand-soft);
-    border-radius:6px;padding:1px 7px;margin-bottom:8px;}
   .pages{margin-top:12px;display:flex;flex-wrap:wrap;gap:7px;align-items:center;}
   .pages .lab{font-size:12px;color:var(--ink-3);margin-right:2px;}
   .page-chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--brand-d);
@@ -113,10 +111,7 @@
   .input-box textarea{width:100%;border:none;outline:none;resize:none;font-size:15px;line-height:1.6;
     font-family:inherit;max-height:180px;display:block;background:transparent;color:var(--ink);}
   .input-actions{display:flex;align-items:center;gap:8px;margin-top:7px;}
-  .kind-group{display:flex;gap:4px;background:#f1f2f5;border-radius:9px;padding:3px;}
-  .kind-btn{border:none;background:transparent;font-size:12.5px;color:var(--ink-3);padding:4px 11px;
-    border-radius:7px;cursor:pointer;}
-  .kind-btn.on{background:#fff;color:var(--brand-d);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.08);}
+
   .input-actions .spacer{flex:1;}
   .hint{font-size:11.5px;color:var(--ink-3);}
   .send{width:36px;height:36px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;
@@ -218,7 +213,6 @@
                     <div><button class="retry" @click="retry(m)">重试</button></div>
                   </div>
                   <template v-else>
-                    <span class="kind-flag" v-if="m.kindLabel">{{ m.kindLabel }}</span>
                     <div class="answer-text" v-html="render(m.answer || '（无内容）')"></div>
                     <div class="pages" v-if="m.pages && m.pages.length">
                       <span class="lab">页码出处（PDF 物理页）：</span>
@@ -253,10 +247,6 @@
           <textarea ref="ta" v-model="input" rows="1" placeholder="向企业知识库提问，例如：中芯国际的总部位于哪个城市？"
             @input="autoGrow" @keydown="onKey"></textarea>
           <div class="input-actions">
-            <div class="kind-group">
-              <button class="kind-btn" v-for="k in kinds" :key="k.v"
-                      :class="{on:kind===k.v}" @click="kind=k.v">{{ k.label }}</button>
-            </div>
             <span class="spacer"></span>
             <span class="hint">Enter 发送 · Shift+Enter 换行</span>
             <button class="send" :class="{ready:input.trim() && !sending}" :disabled="!input.trim() || sending"
@@ -281,17 +271,11 @@ createApp({
       input:'', kind:'string', sending:false,
       health:{},
       kbName:'中芯国际 2024 年年度报告',
-      kinds:[
-        {v:'string',label:'文本'},
-        {v:'number',label:'数字'},
-        {v:'boolean',label:'是否'},
-        {v:'names',label:'名称'},
-      ],
-      kindLabelMap:{string:'文本型',number:'数值型',boolean:'判断型',names:'名称型'},
+
       examples:[
-        {q:'中芯国际的总部位于哪个城市？',kind:'string',d:'文本抽取 · 预期：上海'},
-        {q:'中芯国际2024年度的营业收入是多少人民币？',kind:'number',d:'数值抽取 · 附财务报表页码'},
-        {q:'中芯国际2024年是否盈利？',kind:'boolean',d:'是 / 否 判断'},
+        {q:'中芯国际的总部位于哪个城市？',kind:'string',d:'预期：上海'},
+        {q:'中芯国际2024年度的营业收入是多少人民币？',kind:'number',d:'附财务报表页码'},
+        {q:'中芯国际2024年是否盈利？',kind:'boolean',d:'盈亏判断'},
         {q:'中芯国际的注册地址在哪里？',kind:'string',d:'区分注册地与总部'},
       ],
     };
@@ -357,7 +341,7 @@ createApp({
           const defaultSha = refs.length ? refs[0].pdf_sha1 : '';
           finish({loading:false, answer:d.answer, pages:d.pages||[], references:refs, refMap:refMap,
             defaultSha:defaultSha, reasoning:d.reasoning_summary||'',
-            company:d.company, elapsed:d.elapsed_sec, kindLabel:this.kindLabelMap[d.kind]||''});
+            company:d.company, elapsed:d.elapsed_sec});
         }
       }catch(e){
         finish({loading:false, error:e.name==='AbortError' ? '请求超时（超过 180 秒），请重试。' : ('网络/服务错误：'+e.message)});
