@@ -645,6 +645,7 @@ class AsyncOpenaiProcessor:
 class BaseDashscopeProcessor:
     def __init__(self):
         # 从环境变量读取API-KEY
+        load_dotenv()
         api_key = os.getenv("DASHSCOPE_API_KEY")
         dashscope.api_key = api_key  # 向量（TextEmbedding）等模块仍使用 dashscope 原生接口
         # qwen3.8-flash 等新模型需走百炼 OpenAI 兼容端点（原生 Generation.call 会报 url error）
