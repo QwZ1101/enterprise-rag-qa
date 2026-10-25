@@ -1,8 +1,11 @@
 import json
+from contextvars import copy_context
+from trace_logging import observed_call, traced_request, emit
 from typing import Union, Dict, List, Optional
 import re
 from pathlib import Path
 from src.retrieval import VectorRetriever, HybridRetriever
+from src.fusion_retrieval import FusionRetriever
 from src.api_requests import APIProcessor
 from tqdm import tqdm
 import pandas as pd
@@ -26,7 +29,9 @@ class QuestionsProcessor:
         parallel_requests: int = 10,
         api_provider: str = "dashscope", # openai
         answering_model: str = "qwen3.8-flash", # 对话生成模型；OpenAI 可选 gpt-4o-2024-08-06
-        full_context: bool = False
+        full_context: bool = False,
+        retrieval_mode: str = 'vector',
+        report_id: Optional[str] = None,
     ):
         # 初始化问题处理器，配置检索、模型、并发等参数
         self.questions = self._load_questions(questions_file_path)
@@ -44,6 +49,12 @@ class QuestionsProcessor:
         self.api_provider = api_provider
         self.openai_processor = APIProcessor(provider=api_provider)
         self.full_context = full_context
+        if retrieval_mode not in ('vector', 'hybrid'):
+            raise ValueError('retrieval_mode must be vector or hybrid')
+        if retrieval_mode == 'hybrid' and llm_reranking:
+            raise ValueError('新版混合召回不调用 LLM 重排；请关闭 llm_reranking')
+        self.retrieval_mode = retrieval_mode
+        self.report_id = report_id
 
         self.answer_details = []
         self.detail_counter = 0
@@ -62,14 +73,24 @@ class QuestionsProcessor:
             return ""
         
         context_parts = []
+        seen = set()
         for result in retrieval_results:
-            page_number = result['page']
-            text = result['text']
-            context_parts.append(f'Text retrieved from page {page_number}: \n"""\n{text}\n"""')
+            for source in [result] + result.get('context_pages', []):
+                page_number, text = source['page'], source['text']
+                report_id = result.get('pdf_sha1', '')
+                key = (report_id, page_number, text)
+                if key not in seen:
+                    seen.add(key)
+                    context_parts.append(f'Report {report_id}; text retrieved from page {page_number}: \n"""\n{text}\n"""')
             
         return "\n\n---\n\n".join(context_parts)
 
-    def _extract_references(self, pages_list: list, company_name: str) -> list:
+    def _extract_references(self, pages_list: list, company_name: str, retrieval_results=None) -> list:
+        if retrieval_results is not None:
+            identities = {r.get('pdf_sha1') for r in retrieval_results if r.get('pdf_sha1')}
+            if len(identities) != 1:
+                raise ValueError('引用必须来自本次唯一报告，不按公司列表猜测 PDF')
+            return [{'pdf_sha1': next(iter(identities)), 'page_index': page} for page in pages_list]
         # 根据公司名和页码列表，提取引用信息
         if self.subset_path is None:
             raise ValueError("subset_path is required for new challenge pipeline when processing references.")
@@ -92,44 +113,32 @@ class QuestionsProcessor:
             refs.append({"pdf_sha1": company_sha1, "page_index": page})
         return refs
 
-    def _validate_page_references(self, claimed_pages: list, retrieval_results: list, min_pages: int = 2, max_pages: int = 8) -> list:
+    def _validate_page_references(self, claimed_pages: list, retrieval_results: list, min_pages: int = 0, max_pages: int = 8) -> list:
+        """仅保留模型声明、且确实在召回结果中的有效页码，不自动补齐引用。
+
+        min_pages 为兼容旧调用保留，现不再用它添加候选页。
+        页码存在不等于该页支持结论；此处不宣称完成语义支持校验。
         """
-        校验LLM答案中引用的页码是否真实存在于检索结果中。
-        若不足最小页数，则补充检索结果中的top页。
-        """
-        if claimed_pages is None:
-            claimed_pages = []
-        
-        retrieved_pages = [result['page'] for result in retrieval_results]
-        
-        validated_pages = [page for page in claimed_pages if page in retrieved_pages]
-        
-        if len(validated_pages) < len(claimed_pages):
-            removed_pages = set(claimed_pages) - set(validated_pages)
-            print(f"Warning: Removed {len(removed_pages)} hallucinated page references: {removed_pages}")
-        
-        if len(validated_pages) < min_pages and retrieval_results:
-            existing_pages = set(validated_pages)
-            
-            for result in retrieval_results:
-                page = result['page']
-                if page not in existing_pages:
-                    validated_pages.append(page)
-                    existing_pages.add(page)
-                    
-                    if len(validated_pages) >= min_pages:
-                        break
-        
-        if len(validated_pages) > max_pages:
-            print(f"Trimming references from {len(validated_pages)} to {max_pages} pages")
-            validated_pages = validated_pages[:max_pages]
-        
+        claimed = claimed_pages if isinstance(claimed_pages, list) else []
+        retrieved_pages = {source.get('page') for result in retrieval_results
+                           for source in [result] + result.get('context_pages', [])
+                           if type(source.get('page')) is int and source['page'] > 0}
+        validated_pages = []
+        for page in claimed:
+            if type(page) is int and page in retrieved_pages and page not in validated_pages:
+                validated_pages.append(page)
+        validated_pages = validated_pages[:max(0, max_pages)]
+        emit('citation_validation', claimed_pages=claimed, accepted_pages=validated_pages,
+             evidence_check='membership_only', added_pages=[])
         return validated_pages
 
     def get_answer_for_company(self, company_name: str, question: str, schema: str) -> dict:
         # 针对单个公司，检索上下文并调用LLM生成答案
         t0 = time.time()
-        if self.llm_reranking:
+        if getattr(self, 'retrieval_mode', 'vector') == 'hybrid':
+            retriever = FusionRetriever(vector_db_dir=self.vector_db_dir, documents_dir=self.documents_dir,
+                                        report_id=getattr(self, 'report_id', None))
+        elif self.llm_reranking:
             retriever = HybridRetriever(
                 vector_db_dir=self.vector_db_dir,
                 documents_dir=self.documents_dir
@@ -142,15 +151,26 @@ class QuestionsProcessor:
         t1 = time.time()
         print(f"[计时] [get_answer_for_company] 检索器初始化耗时: {t1-t0:.2f} 秒")
         if self.full_context:
-            retrieval_results = retriever.retrieve_all(company_name)
+            selection = {}
+            if getattr(self, 'retrieval_mode', 'vector') == 'vector' and getattr(self, 'report_id', None):
+                if self.llm_reranking:
+                    raise ValueError('旧重排流程不支持 report_id；请使用新版混合召回')
+                selection['report_id'] = self.report_id
+            retrieval_results = observed_call("retrieval.all", retriever.retrieve_all, company_name, **selection)
         else:           
             t2 = time.time()
-            retrieval_results = retriever.retrieve_by_company_name(
+            selection = {}
+            if getattr(self, 'retrieval_mode', 'vector') == 'vector' and getattr(self, 'report_id', None):
+                if self.llm_reranking:
+                    raise ValueError('旧重排流程不支持 report_id；请使用新版混合召回')
+                selection['report_id'] = self.report_id
+            retrieval_results = observed_call("retrieval.by_company", retriever.retrieve_by_company_name,
                 company_name=company_name,
                 query=question,
                 llm_reranking_sample_size=self.llm_reranking_sample_size,
                 top_n=self.top_n_retrieval,
-                return_parent_pages=self.return_parent_pages
+                return_parent_pages=self.return_parent_pages,
+                **selection,
             )
             t3 = time.time()
             print(f"[计时] [get_answer_for_company] 检索耗时: {t3-t2:.2f} 秒")
@@ -160,7 +180,7 @@ class QuestionsProcessor:
         rag_context = self._format_retrieval_results(retrieval_results)
         t5 = time.time()
         print(f"[计时] [get_answer_for_company] 构建rag_context耗时: {t5-t4:.2f} 秒")
-        answer_dict = self.openai_processor.get_answer_from_rag_context(
+        answer_dict = observed_call("model.answer_from_context", self.openai_processor.get_answer_from_rag_context,
             question=question,
             rag_context=rag_context,
             schema=schema,
@@ -169,11 +189,12 @@ class QuestionsProcessor:
         t6 = time.time()
         print(f"[计时] [get_answer_for_company] LLM调用耗时: {t6-t5:.2f} 秒")
         self.response_data = self.openai_processor.response_data
+        emit("model_usage", usage=self.response_data)
         if self.new_challenge_pipeline:
             pages = answer_dict.get("relevant_pages", [])
             validated_pages = self._validate_page_references(pages, retrieval_results)
             answer_dict["relevant_pages"] = validated_pages
-            answer_dict["references"] = self._extract_references(validated_pages, company_name)
+            answer_dict["references"] = self._extract_references(validated_pages, company_name, retrieval_results)
         print(f"[计时] [get_answer_for_company] 总耗时: {t6-t0:.2f} 秒")
         return answer_dict
 
@@ -200,6 +221,7 @@ class QuestionsProcessor:
         
         return found_companies
 
+    @traced_request("rag", Path(__file__).resolve().parents[1])
     def process_question(self, question: str, schema: str):
         # 处理单个问题，支持多公司比较
         if self.new_challenge_pipeline:
@@ -477,7 +499,7 @@ class QuestionsProcessor:
         3. 汇总结果并生成最终比较答案
         """
         # Step 1: Rephrase the comparative question
-        rephrased_questions = self.openai_processor.get_rephrased_questions(
+        rephrased_questions = observed_call("model.rephrase", self.openai_processor.get_rephrased_questions,
             original_question=question,
             companies=companies
         )
@@ -501,7 +523,7 @@ class QuestionsProcessor:
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             future_to_company = {
-                executor.submit(process_company_question, company): company 
+                executor.submit(copy_context().run, process_company_question, company): company
                 for company in companies
             }
             
@@ -525,17 +547,19 @@ class QuestionsProcessor:
         aggregated_references = list(unique_refs.values())
         
         # Step 3: Get the comparative answer using all individual answers
-        comparative_answer = self.openai_processor.get_answer_from_rag_context(
+        comparative_answer = observed_call("model.answer_from_context", self.openai_processor.get_answer_from_rag_context,
             question=question,
             rag_context=individual_answers,
             schema="comparative",
             model=self.answering_model
         )
         self.response_data = self.openai_processor.response_data
+        emit("model_usage", usage=self.response_data)
         
         comparative_answer["references"] = aggregated_references
         return comparative_answer
 
+    @traced_request("rag", Path(__file__).resolve().parents[1])
     def process_single_question(self, question: str, kind: str = "string"):
         """
         单条问题推理，返回结构化答案。
@@ -569,4 +593,3 @@ class QuestionsProcessor:
             print(f"[计时] [单问] 多公司比较耗时: {t3-t2:.2f} 秒")
             print(f"[计时] [单问] 总耗时: {t3-t0:.2f} 秒")
             return answer_dict
-    

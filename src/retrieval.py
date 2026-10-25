@@ -179,7 +179,8 @@ class VectorRetriever:
             report = {
                 "name": sha1,
                 "vector_db": vector_db,
-                "document": document
+                "document": document,
+                "document_path": document_path,
             }
             all_dbs.append(report)
         return all_dbs
@@ -195,23 +196,20 @@ class VectorRetriever:
         similarity_score = round(similarity_score, 4)
         return similarity_score
 
-    def retrieve_by_company_name(self, company_name: str, query: str, llm_reranking_sample_size: int = None, top_n: int = 3, return_parent_pages: bool = False) -> List[Tuple[str, float]]:
+    def select_report(self, company_name, report_id=None):
+        matches = [r for r in self.all_dbs if r['document']['metainfo'].get('company_name') == company_name]
+        if not matches:
+            matches = [r for r in self.all_dbs if company_name in r['document']['metainfo'].get('file_name', '')]
+        if report_id is not None:
+            matches = [r for r in matches if r['document']['metainfo']['sha1'] == report_id]
+        if len(matches) != 1:
+            raise ValueError('需要唯一报告，请明确 report_id；匹配报告：' + ', '.join(r['name'] for r in matches))
+        return matches[0]
+
+    def retrieve_by_company_name(self, company_name: str, query: str, llm_reranking_sample_size: int = None, top_n: int = 3, return_parent_pages: bool = False, report_id=None) -> List[Dict]:
         # 按公司名检索相关文本块，返回向量距离最近的top_n个块
         # 直接遍历所有分段 JSON，找到 company_name 匹配的文档
-        target_report = None
-        for report in self.all_dbs:
-            document = report.get("document", {})
-            metainfo = document.get("metainfo", {})
-            # 优先 company_name 字段匹配，否则 fallback 到 sha1 包含关系
-            if metainfo.get("company_name") == company_name:
-                target_report = report
-                break
-            elif company_name in metainfo.get("file_name", ""):
-                target_report = report
-                break
-        if target_report is None:
-            _log.error(f"No report found with '{company_name}' company name.")
-            raise ValueError(f"No report found with '{company_name}' company name.")
+        target_report = self.select_report(company_name, report_id)
         # 取 sha1，直接查找 faiss 文件（不再用 sha1_name，也不做 md5 编码）
         sha1 = target_report["document"]["metainfo"].get("sha1")
         if not sha1:
@@ -224,13 +222,21 @@ class VectorRetriever:
         chunks = document["content"]["chunks"]
         pages = document["content"].get("pages", [])
         actual_top_n = min(top_n, len(chunks))
+        if actual_top_n <= 0:
+            return []
+        if vector_db.ntotal != len(chunks):
+            raise ValueError('向量条数与分块数不一致，拒绝使用错位索引')
         # 获取 query 的 embedding，支持 openai/dashscope
         embedding = self._get_embedding(query)
         embedding_array = np.array(embedding, dtype=np.float32).reshape(1, -1)
+        if embedding_array.shape[1] != vector_db.d or not np.isfinite(embedding_array).all():
+            raise ValueError('查询向量维度或数值不合法')
         distances, indices = vector_db.search(x=embedding_array, k=actual_top_n)
         retrieval_results = []
         seen_pages = set()
         for distance, index in zip(distances[0], indices[0]):
+            if index < 0 or index >= len(chunks):
+                continue
             distance = round(float(distance), 4)
             chunk = chunks[index]
             parent_page = None
@@ -244,6 +250,7 @@ class VectorRetriever:
                         "page": parent_page["page"],
                         "text": parent_page["text"]
                     }
+                    result.update(pdf_sha1=sha1, chunk_id=f'page:{parent_page["page"]}', source_pages=[parent_page['page']])
                     retrieval_results.append(result)
             else:
                 result = {
@@ -251,24 +258,13 @@ class VectorRetriever:
                     "page": chunk.get("page", 0),
                     "text": chunk["text"]
                 }
+                result.update(pdf_sha1=sha1, chunk_id=f'original:{int(index)}', source_pages=[chunk.get('page', 0)])
                 retrieval_results.append(result)
         return retrieval_results
 
-    def retrieve_all(self, company_name: str) -> List[Dict]:
+    def retrieve_all(self, company_name: str, report_id=None) -> List[Dict]:
         # 检索公司所有文本块，返回全部内容
-        target_report = None
-        for report in self.all_dbs:
-            document = report.get("document", {})
-            metainfo = document.get("metainfo")
-            if not metainfo:
-                continue
-            if metainfo.get("company_name") == company_name:
-                target_report = report
-                break
-        
-        if target_report is None:
-            _log.error(f"No report found with '{company_name}' company name.")
-            raise ValueError(f"No report found with '{company_name}' company name.")
+        target_report = self.select_report(company_name, report_id)
         
         document = target_report["document"]
         pages = document["content"]["pages"]
@@ -280,6 +276,7 @@ class VectorRetriever:
                 "page": page["page"],
                 "text": page["text"]
             }
+            result.update(pdf_sha1=document['metainfo']['sha1'], source_pages=[page['page']])
             all_pages.append(result)
             
         return all_pages

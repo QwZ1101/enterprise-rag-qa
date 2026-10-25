@@ -20,6 +20,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 from fastapi import FastAPI
@@ -31,6 +32,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 from src.pipeline import Pipeline, RunConfig  # noqa: E402
+from trace_logging import traced_request, record_error
 
 DATA_ROOT = ROOT / "data" / "stock_data"
 WEB_DIR = ROOT / "web"
@@ -65,6 +67,7 @@ _ask_lock = threading.Lock()
 class AskRequest(BaseModel):
     question: str
     kind: str = "string"
+    report_id: Optional[str] = None
 
 
 @app.get("/api/health")
@@ -74,10 +77,14 @@ def health():
         "companies": COMPANIES,
         "chat_model": pipeline.run_config.answering_model,
         "embedding_model": "qwen3.7-text-embedding-flash",
+        "retrieval_mode": pipeline.run_config.retrieval_mode,
+        "reports": [{'report_id': str(r.sha1), 'company': str(r.company_name), 'title': str(r.file_name)}
+                    for r in SUBSET_DF.itertuples()],
     }
 
 
 @app.post("/api/ask")
+@traced_request("rag", ROOT)
 def ask(req: AskRequest):
     question = (req.question or "").strip()
     kind = (req.kind or "string").strip()
@@ -100,11 +107,20 @@ def ask(req: AskRequest):
             content={"error": f"问题中需要包含公司名，知识库包含：{ '、'.join(COMPANIES) }"},
         )
 
+    matches = SUBSET_DF[SUBSET_DF['company_name'] == company]
+    if req.report_id is not None:
+        matches = matches[matches['sha1'].astype(str) == req.report_id]
+    if len(matches) != 1:
+        return JSONResponse(status_code=400, content={'error': '请明确唯一 report_id，避免混用同公司不同报告。',
+                            'reports': [{'report_id': str(r.sha1), 'title': str(r.file_name)}
+                                        for r in SUBSET_DF[SUBSET_DF['company_name'] == company].itertuples()]})
+    selected_report = str(matches.iloc[0]['sha1'])
     t0 = time.time()
     try:
         with _ask_lock:
-            ans = pipeline.answer_single_question(q_for_llm, kind=kind)
+            ans = pipeline.answer_single_question(q_for_llm, kind=kind, report_id=selected_report)
     except Exception as e:  # noqa: BLE001 - 把后端异常友好地返回给前端
+        record_error(e, handled=True)
         return JSONResponse(status_code=500, content={"error": f"问答失败：{e}"})
 
     pages = sorted({p for p in (ans.get("relevant_pages") or []) if isinstance(p, int)})

@@ -38,18 +38,23 @@ def main():
     ap.add_argument("--batch", action="store_true",
                     help="批量处理 data/stock_data/questions.json 并生成 answers 文件")
     ap.add_argument("--data-root", default=str(ROOT / "data" / "stock_data"))
+    ap.add_argument('--report-id', help='同公司有多份报告时明确选择报告 ID')
+    ap.add_argument('--retrieval-mode', choices=['hybrid', 'vector'], default='hybrid',
+                    help='hybrid 为中文 BM25+向量 RRF；vector 为旧版基线（不使用页码修正版）')
     args = ap.parse_args()
 
-    pipeline = Pipeline(Path(args.data_root), run_config=RunConfig())
+    pipeline = Pipeline(Path(args.data_root), run_config=RunConfig(retrieval_mode=args.retrieval_mode))
 
     if args.batch:
+        if args.report_id:
+            ap.error('--report-id 仅用于单问；批量问题需在数据层明确报告选择')
         pipeline.process_questions()
         return
 
     if not args.question:
         ap.error("请提供问题文本，或使用 --batch 批量处理 questions.json")
 
-    answer = pipeline.answer_single_question(args.question, kind=args.kind)
+    answer = pipeline.answer_single_question(args.question, kind=args.kind, report_id=args.report_id)
 
     print("\n================ 答案 ================")
     print(answer.get("final_answer"))

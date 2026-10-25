@@ -193,3 +193,16 @@ Desktop.ini
 
 # --- 本机环境备份等个人文件 ---
 user_path_backup_*.txt
+
+# Local execution traces can contain business data
+/logs/
+/trace_exports/
+/.runtime/
+.env.*
+!.env.example
+
+# New evaluation outputs contain source excerpts and live traces
+/evaluation/runs/
+
+# Local physical-page text repairs contain PDF content; regenerate from local sources.
+/data/stock_data/databases/retrieval_overlays/

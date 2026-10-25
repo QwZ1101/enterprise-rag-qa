@@ -1,3 +1,4 @@
+from trace_logging import traced_request
 # DashScope（qwen3.8-flash 对话 / qwen3.7-text-embedding-flash 向量）API 有 QPM/TPM 限流，parallel_requests 与批量大小需据此控制，避免超出阈值
 from dataclasses import dataclass
 from pathlib import Path
@@ -58,6 +59,7 @@ class RunConfig:
     use_vector_dbs: bool = True
     use_bm25_db: bool = False
     llm_reranking: bool = False
+    retrieval_mode: str = 'hybrid'
     llm_reranking_sample_size: int = 30
     top_n_retrieval: int = 10
     parallel_requests: int = 1 # 并行的数量，需要限制，否则会超出DashScope（qwen3.8-flash）的QPM/TPM阈值
@@ -293,7 +295,8 @@ class Pipeline:
             parallel_requests=self.run_config.parallel_requests,
             api_provider=self.run_config.api_provider,
             answering_model=self.run_config.answering_model,
-            full_context=self.run_config.full_context            
+            full_context=self.run_config.full_context,
+            retrieval_mode=self.run_config.retrieval_mode,
         )
         
         output_path = self._get_next_available_filename(self.paths.answers_file_path)
@@ -305,7 +308,8 @@ class Pipeline:
         )
         print(f"Answers saved to {output_path}")
 
-    def answer_single_question(self, question: str, kind: str = "string"):
+    @traced_request("rag", Path(__file__).resolve().parents[1])
+    def answer_single_question(self, question: str, kind: str = "string", report_id: str = None):
         """
         单条问题即时推理，返回结构化答案（dict）。
         kind: 支持 'string'、'number'、'boolean'、'names' 等
@@ -325,7 +329,9 @@ class Pipeline:
             parallel_requests=1,
             api_provider=self.run_config.api_provider,
             answering_model=self.run_config.answering_model,
-            full_context=self.run_config.full_context
+            full_context=self.run_config.full_context,
+            retrieval_mode=self.run_config.retrieval_mode,
+            report_id=report_id,
         )
         t1 = time.time()
         print(f"[计时] QuestionsProcessor 初始化耗时: {t1-t0:.2f} 秒")
@@ -360,6 +366,7 @@ max_config = RunConfig(
     use_serialized_tables=False,
     parent_document_retrieval=True,
     llm_reranking=True,
+    retrieval_mode='vector',
     parallel_requests=4,
     submission_file=True,
     pipeline_details="Custom pdf parsing + vDB + Router + Parent Document Retrieval + reranking + SO CoT; llm = qwen3.8-flash",

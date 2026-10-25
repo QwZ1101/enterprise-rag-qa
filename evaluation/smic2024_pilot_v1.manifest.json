@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "created_utc": "2026-10-21T12:03:58.468344+00:00",
+  "dataset_sha256": "a574d5eafe3148f10728a27121758925499dec0bc7cac05c276fd02d0690e63d",
+  "source_pdf": "D:\\AI大模型应用专家\\18-项目实战：企业知识库\\RAG-cy\\data\\stock_data\\pdf_reports\\【财报】中芯国际：中芯国际2024年年度报告.pdf",
+  "pdf_sha256": "d0d08d761acb9c16f88343e313a893be17469d21e96042556378631d069924d1",
+  "corpus_file": "data\\stock_data\\databases\\chunked_reports\\【财报】中芯国际：中芯国际2024年年度报告.json",
+  "corpus_sha256": "aa75fbc719da432fb6931a9401ff47f99cdc21eca43978f7fba83f1f637723f4",
+  "vector_file": "data/stock_data/databases/vector_dbs/stock_10001.faiss",
+  "vector_sha256": "93fffbd120a91444fc3937e1795455606396de6de16d265f106617777dcb6d7a",
+  "source_pages": 222,
+  "parsed_pages": 216,
+  "chunks": 738,
+  "questions": 24,
+  "answerable": 20,
+  "unanswerable": 4,
+  "human_reviewed": false,
+  "historical_evidence": false,
+  "sampling": "按章节选取的小样本诊断集，非随机，非独立测试集；有意含2个缺页挑战题。"
+}
