@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>齐文忠的学习笔记</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font: 16px/1.7 -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  color: #1f2328;
+  background: #f6f7f9;
+}
+main { max-width: 760px; margin: 0 auto; padding: 48px 24px 64px; }
+h1 { font-size: 28px; margin: 0 0 8px; }
+.lead { color: #57606a; margin: 0 0 36px; }
+ul.cards { list-style: none; margin: 0; padding: 0; }
+li.card {
+  background: #fff; border: 1px solid #e3e6ea; border-radius: 10px;
+  padding: 20px 22px; margin-bottom: 16px;
+}
+li.card h2 { font-size: 18px; margin: 0 0 6px; }
+li.card h2 a { color: #1f2328; text-decoration: none; }
+li.card h2 a:hover { text-decoration: underline; }
+li.card p { margin: 0; color: #57606a; }
+ul.tags { list-style: none; margin: 10px 0 0; padding: 0; }
+ul.tags li {
+  display: inline-block; font-size: 13px; color: #57606a;
+  background: #eef1f4; border-radius: 4px; padding: 1px 8px; margin: 0 6px 6px 0;
+}
+footer {
+  margin-top: 40px; padding-top: 20px; border-top: 1px solid #e3e6ea;
+  color: #6b7280; font-size: 14px;
+}
+footer a { color: #57606a; }
+</style>
+</head>
+<body>
+<main>
+  <h1>齐文忠的学习笔记</h1>
+  <p class="lead">个人学习编程过程中的技术笔记整理与作品展示。内容为本人编写的代码示例与学习记录，不面向公众提供经营性信息服务。</p>
+
+  <ul class="cards">
+    <li class="card">
+      <h2><a href="https://rag.qwzcode.com/">文档知识库问答（RAG）</a></h2>
+      <p>把 PDF 文档解析、分块并建立索引，提问时做混合召回并给出带页码的引用答案。</p>
+      <ul class="tags">
+        <li>MinerU</li><li>FAISS</li><li>BM25</li><li>RRF</li><li>Qwen</li><li>FastAPI</li>
+      </ul>
+    </li>
+    <li class="card">
+      <h2><a href="https://chatbi.qwzcode.com/">自然语言数据问答（ChatBI）</a></h2>
+      <p>用自然语言提问，模型生成只读 SQL 查询本地数据表，返回结果表格、图表与统计说明。</p>
+      <ul class="tags">
+        <li>qwen-agent</li><li>原生 tool_calls</li><li>SQL 白名单校验</li><li>只读账号</li><li>Gradio</li>
+      </ul>
+    </li>
+  </ul>
+
+  <footer>
+    <p>本站已通过工信部 ICP 备案：<a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener">赣ICP备2026027711号-1</a></p>
+    <p>本站内容仅用于个人学习与作品展示，不提供金融、证券类信息服务，不构成任何投资建议。</p>
+  </footer>
+</main>
+</body>
+</html>
